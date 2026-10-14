@@ -89,6 +89,16 @@ overwritten at any point.
   inventory added, Flutter reproduction commands now use the verified
   executable path (`C:\flutter\bin\flutter.bat`, since `flutter` is not on
   `PATH`).
+- Created the missing assignment §16 deliverable:
+  **`docs/ui-interaction-inventory.md`** — all visible controls across the nine
+  screens, with the eight required columns (screen, control, user action,
+  expected result, API, state changes, failure behaviour, test) and all **17
+  mandatory interactions** covered. Each row is marked **[A]** automated /
+  **[M]** manually verified live / **[NV]** not verified, with the gap named.
+  3 of 17 groups have automated coverage, 10 were exercised in the running
+  app, the remainder are source-only and listed as outstanding §16 work.
+  Documentation only — no application code, test, configuration, screenshot,
+  database or Compose change was made.
 
 ### Order tracking timeline bug — root cause and fix
 
