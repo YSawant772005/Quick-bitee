@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user, page_params
-from app.core.errors import InvalidRequestError, NotFoundError
+from app.core.errors import ForbiddenError, InvalidRequestError, NotFoundError
 from app.db.session import get_session
 from app.models.catalog import Restaurant
 from app.models.orders import DriverAssignment, Order, OrderStatusHistory, Notification
@@ -49,7 +49,7 @@ async def place_order(
     current_user: User = Depends(get_current_user),
 ) -> OrderAcceptedResponse:
     if current_user.role != "customer":
-        raise InvalidRequestError("Only customers can place orders.")
+        raise ForbiddenError("Only customers can place orders.")
     if not idempotency_key or len(idempotency_key) < 8 or len(idempotency_key) > 80:
         raise InvalidRequestError("A valid Idempotency-Key header (8-80 chars) is required.")
     result = await create_order(session, current_user.id, payload, idempotency_key)
