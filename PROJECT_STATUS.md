@@ -52,8 +52,8 @@ injection, automated tests, and a one-command Docker Compose startup.
   (`backend/tests/`: test_auth, test_catalog, test_checkout, test_workers,
   test_recovery, test_admin, test_health). Note: earlier revisions of this
   file claimed 36; the actual collected count is 34.
-- Flutter: **7 passed** (`cart_controller_test.dart` 4, `login_screen_test.dart`
-  2, `money formatting` 1).
+- Flutter: **8 passed** (`cart_controller_test.dart` 4, `login_screen_test.dart`
+  2, `order_detail_screen_test.dart` 1, money formatting 1).
 - `flutter analyze`: **0 errors**, 2 infos (web-only `dart:html` deprecation
   in `lib/core/web_origin_web.dart`) — expected and accepted.
 - Load benchmark `backend/scripts/load_test.py` (untracked) — 100 orders,
@@ -73,6 +73,7 @@ Commits added in this session:
 |---|---|
 | `e1beb87` | Riverpod 3.x migration (`router.dart`, `app.dart`, `analysis_options.yaml`) + `frontend/android/` scaffolding |
 | *this commit* | Documentation and tooling: `README.md`, `PROJECT_STATUS.md`, `docs/traceability-matrix.md`, `docs/screenshots/*.png`, `backend/scripts/load_test.py` |
+| *this commit* | `fix: render order tracking history and notifications` — the `Paginated<T>` cast fix, its regression test, the refreshed `07-order-tracking.png` and this status record. Committed 2026-10-15; **not pushed**. (A commit cannot contain its own hash; read it with `git log --oneline -1`.) |
 
 Nothing was pushed to the remote. No existing change was reset, cleaned or
 overwritten at any point.
@@ -89,19 +90,85 @@ overwritten at any point.
   executable path (`C:\flutter\bin\flutter.bat`, since `flutter` is not on
   `PATH`).
 
+### Order tracking timeline bug — root cause and fix
+
+**Symptom:** `docs/screenshots/07-order-tracking.png` showed an empty
+"Timeline" section and "No notifications yet." under Updates, while the same
+order had four notifications on the notifications screen.
+
+**Ruled out first (as required):**
+- Database — the order's rows are correct. `GET /api/v1/notifications`
+  (`total=317`) returns all four notifications for order `5b882aa3` on
+  **page 1** (`order.created`, `order.paid`, `order.confirmed`,
+  `order.driver.assigned`), so pagination is not the cause.
+- API contract — `NotificationOut.order_id` is a `str` equal to
+  `OrderDetailOut.id`, and `GET /orders/{id}/history` returns 4 rows. No
+  mismatch.
+
+**Root cause:** `frontend/lib/features/orders/order_detail_screen.dart`
+`_refresh()` awaited three futures and assigned two of them with invalid
+casts:
+
+```dart
+_history = results[1] as List<HistoryEntry>;          // actually Paginated<HistoryEntry>
+_notifications = results[2] as List<AppNotification>; // actually Paginated<AppNotification>
+```
+
+`Paginated<T>` (`frontend/lib/models/models.dart:91`) is a plain wrapper class,
+not a `List`. The casts compile (the list from `Future.wait` is typed
+`List<Object>`) but throw `TypeError` at runtime. The throw happens inside the
+`setState` callback, so **no** state is applied; the failure is swallowed by
+the surrounding `catch`, the screen keeps polling, and after five failures it
+can only show the generic error/spinner state. Timeline and Updates therefore
+never populate.
+
+**Fix (2 lines):** unwrap the paginated envelope.
+
+```dart
+_history = (results[1] as Paginated<HistoryEntry>).items;
+_notifications = (results[2] as Paginated<AppNotification>).items;
+```
+
+**Changed files**
+- `frontend/lib/features/orders/order_detail_screen.dart` (fix, lines 63–64)
+- `frontend/test/order_detail_screen_test.dart` (new regression test)
+- `docs/screenshots/07-order-tracking.png` (re-captured from the fixed build)
+- `PROJECT_STATUS.md` (this record)
+
+**Regression test:** `order_detail_screen_test.dart` mounts the real
+`OrderDetailScreen` against a stubbed Dio `HttpClientAdapter` serving payloads
+copied verbatim from the live API. It asserts the order renders, both timeline
+entries render, the empty state is absent and this order's notifications
+render. It **fails on the pre-fix code** ("Found 0 widgets with text 'Order
+accepted'") and passes after the fix.
+
+**Verification:** `flutter test` **8 passed** (was 7); `flutter analyze`
+**0 errors**, same 2 accepted web-only infos. Backend untouched, so the
+pytest suite was not re-run (last result: 34 passed).
+
+**Live verification (2026-10-14, 23:08 IST):** the web image was rebuilt
+(`docker compose build web` → image `dd66ff015d9d`) and **only** the web
+container was recreated; api, workers, PostgreSQL and RabbitMQ were untouched
+(still `Up 3–4 hours`). The running app was inspected at
+`http://localhost:8088` for order `5b882aa3`: the Timeline renders all four
+history entries (PENDING → PAID → CONFIRMED → DRIVER_ASSIGNED) and Updates
+renders all four notifications; "No notifications yet." is gone and there were
+no page errors. `docs/screenshots/07-order-tracking.png` was re-captured from
+this verified state, so the screenshot evidence now matches the fixed build.
+
 ## 6. Remaining work
 
 - None blocking. Optional future items are listed in §7.
 
 ## 7. Errors / known issues
 
-- No compile or test failures at audit time.
-- Observed on the tracking screen: the "Timeline / Updates" section renders
-  "No notifications yet." even though the same order produced four persisted
-  notifications (visible on the Notifications screen, `09-notifications.png`).
-  The order-scoped timeline query appears not to match these rows. Reported
-  as an observation — **not fixed**, because it is a behaviour change, not
-  housekeeping.
+- The tracking-timeline defect is fixed and **verified in the running stack**
+  (see §5). Fix, regression test and refreshed screenshot are committed;
+  **nothing has been pushed to the remote**.
+- No other compile or test failures at audit time.
+- The tracking-timeline defect was root-caused and fixed; it had rendered the
+  timeline and notifications empty on the tracking screen. Verified fixed in
+  the live application, and `07-order-tracking.png` re-captured — see §5.
 - Admin overview shows `Quarantined 497`. These are retained failure records
   from the earlier 100-order load test and `always_fail` injections, not a
   live backlog (`Pending outbox 0`, `Retry backlog 0`).

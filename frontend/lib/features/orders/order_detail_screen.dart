@@ -60,8 +60,8 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
       if (!mounted) return;
       setState(() {
         _order = results[0] as OrderDetail;
-        _history = results[1] as List<HistoryEntry>;
-        _notifications = results[2] as List<AppNotification>;
+        _history = (results[1] as Paginated<HistoryEntry>).items;
+        _notifications = (results[2] as Paginated<AppNotification>).items;
         _error = null;
         _failures = 0;
       });
