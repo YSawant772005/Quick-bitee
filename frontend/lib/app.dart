@@ -19,7 +19,7 @@ class _QuickBiteAppState extends ConsumerState<QuickBiteApp> {
   @override
   void initState() {
     super.initState();
-    _refresher = AuthRefresher(ref as Ref);
+    _refresher = AuthRefresher(ref);
     _router = buildRouter(_refresher);
   }
 

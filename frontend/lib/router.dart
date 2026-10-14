@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' show WidgetRef;
 import 'package:go_router/go_router.dart';
 
 import 'features/admin/admin_screen.dart';
@@ -59,8 +59,8 @@ GoRouter buildRouter(AuthRefresher refresher) => GoRouter(
 
 /// Bridges Riverpod auth state changes into go_router's refreshListenable.
 class AuthRefresher extends ChangeNotifier {
-  AuthRefresher(Ref ref) {
-    ref.listen<AuthState>(authControllerProvider, (_, next) {
+  AuthRefresher(WidgetRef ref) {
+    ref.listenManual<AuthState>(authControllerProvider, (_, next) {
       currentState = next;
       notifyListeners();
     });
