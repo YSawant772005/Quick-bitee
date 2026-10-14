@@ -1,0 +1,155 @@
+name: quickbite
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://quickbite:${QB_DB_PASSWORD:-quickbite}@postgres:5432/quickbite
+  AMQP_URL: amqp://quickbite:${QB_AMQP_PASSWORD:-quickbite}@rabbitmq:5672/
+  JWT_SECRET: ${QB_JWT_SECRET:-dev-insecure-secret-change-me}
+  CORS_ORIGINS: ${QB_CORS_ORIGINS:-http://localhost:8088,http://127.0.0.1:8088}
+  PAYMENT_FAILURE_MODE: ${QB_PAYMENT_FAILURE_MODE:-none}
+  RESTAURANT_FAILURE_MODE: ${QB_RESTAURANT_FAILURE_MODE:-none}
+  DELIVERY_FAILURE_MODE: ${QB_DELIVERY_FAILURE_MODE:-none}
+  NOTIFICATION_FAILURE_MODE: ${QB_NOTIFICATION_FAILURE_MODE:-none}
+  WORKER_CRASH_POINT: ${QB_WORKER_CRASH_POINT:-none}
+  RETRY_DELAYS_SECONDS: ${QB_RETRY_DELAYS_SECONDS:-2,10,30}
+  LOG_LEVEL: INFO
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: quickbite
+      POSTGRES_PASSWORD: ${QB_DB_PASSWORD:-quickbite}
+      POSTGRES_DB: quickbite
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:55432:5432" # host access for local dev/tests only (5432 busy on this host)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quickbite -d quickbite"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: quickbite
+      RABBITMQ_DEFAULT_PASS: ${QB_AMQP_PASSWORD:-quickbite}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:5672:5672" # AMQP for local dev/tests only
+      - "127.0.0.1:15672:15672" # management UI (localhost only)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  migration:
+    build: ./backend
+    command: sh -c "alembic upgrade head && python -m app.seed"
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment: *backend-env
+    ports:
+      - "127.0.0.1:8000:8000" # direct API access for mobile dev/tests
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  payment-worker:
+    build: ./backend
+    command: python -m workers.payment_worker
+    environment: *backend-env
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  restaurant-worker:
+    build: ./backend
+    command: python -m workers.restaurant_worker
+    environment: *backend-env
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  delivery-worker:
+    build: ./backend
+    command: python -m workers.delivery_worker
+    environment: *backend-env
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  notification-worker:
+    build: ./backend
+    command: python -m workers.notification_worker
+    environment: *backend-env
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  outbox-dispatcher:
+    build: ./backend
+    command: python -m workers.outbox_dispatcher
+    environment: *backend-env
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  retry-scheduler:
+    build: ./backend
+    command: python -m workers.retry_scheduler
+    environment: *backend-env
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    ports:
+      - "8088:80" # 8080 is occupied on this host; see README
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  rabbitmq_data:
