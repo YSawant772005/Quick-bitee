@@ -124,8 +124,9 @@ void main() {
     await tester.pumpWidget(_app(adapter));
     await tester.pumpAndSettle();
 
-    // The order itself must load.
-    expect(find.text('DRIVER ASSIGNED'), findsOneWidget);
+    // The order itself must load, and a terminal status is shown.
+    expect(find.textContaining('Order #'), findsOneWidget);
+    expect(find.text('Out for delivery'), findsWidgets);
 
     // Timeline entries from /orders/{id}/history must be shown.
     expect(find.text('Order accepted'), findsOneWidget);

@@ -1,0 +1,10 @@
+{
+  "name": "QuickBitee",
+  "short_name": "QuickBitee",
+  "description": "QuickBitee — food delivery demo (Flutter web + FastAPI)",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F7F4EB",
+  "theme_color": "#123B35",
+  "icons": []
+}

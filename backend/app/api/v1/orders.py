@@ -19,6 +19,7 @@ from app.schemas.orders import (
     OrderItemOut,
     OrderListItemOut,
 )
+from app.services.catalog_service import item_image_map as _item_image_map
 from app.services.order_service import create_order
 
 router = APIRouter(tags=["orders"])
@@ -80,6 +81,9 @@ async def list_orders(
         )
     ).scalars().all()
     items: list[OrderListItemOut] = []
+    image_by_item = await _item_image_map(
+        session, [i.menu_item_id for order in rows for i in order.items]
+    )
     for order in rows:
         restaurant = (
             await session.execute(select(Restaurant).where(Restaurant.id == order.restaurant_id))
@@ -96,6 +100,9 @@ async def list_orders(
                 created_at=order.created_at,
                 restaurant_name=restaurant.name if restaurant else "",
                 item_summary=names,
+                thumbnail_url=(
+                    image_by_item.get(order.items[0].menu_item_id, "") if order.items else ""
+                ),
             )
         )
     return Paginated(items=items, page=params.page, page_size=params.page_size, total=total)
@@ -114,6 +121,7 @@ async def get_order(
     driver = (
         await session.execute(select(DriverAssignment).where(DriverAssignment.order_id == order.id))
     ).scalar_one_or_none()
+    image_by_item = await _item_image_map(session, [item.menu_item_id for item in order.items])
     return OrderDetailOut(
         id=order.id,
         restaurant_id=order.restaurant_id,
@@ -132,6 +140,7 @@ async def get_order(
                 unit_price_minor=item.unit_price_minor,
                 quantity=item.quantity,
                 line_total_minor=item.line_total_minor,
+                image_url=image_by_item.get(item.menu_item_id, ""),
             )
             for item in order.items
         ],

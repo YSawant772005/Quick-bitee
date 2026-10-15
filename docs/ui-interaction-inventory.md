@@ -14,6 +14,16 @@ Evidence legend:
 Source of truth for controls: `frontend/lib/features/**`, `frontend/lib/shared/widgets.dart`,
 `frontend/lib/core/api_client.dart`.
 
+> **Design-refresh note (2026-10).** This inventory was captured before the
+> forest/lime/cream UI refresh. Line numbers in the tables below are historical
+> (see the current source for exact locations), and a few user-visible strings
+> changed: the brand wordmark is now **QuickBitee**, and order statuses render as
+> friendly labels (e.g. `DRIVER_ASSIGNED` → "Out for delivery") via
+> `friendlyStatus()` in `shared/widgets.dart`. The two affected widget tests
+> (`test/login_screen_test.dart`, `test/order_detail_screen_test.dart`) were
+> updated to match. New screens not covered here: `features/explore/`,
+> `features/profile/`. See `docs/REDESIGN_PROGRESS.md` for the full change list.
+
 ---
 
 ## 1. Sign-in — `features/auth/login_screen.dart`

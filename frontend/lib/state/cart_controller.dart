@@ -37,6 +37,7 @@ class CartController extends Notifier<CartState> {
         name: item.name,
         unitPriceMinor: item.priceMinor,
         quantity: (existing?.quantity ?? 0) + quantity,
+        imageUrl: item.imageUrl,
       ),
     };
     state = current.copyWith(restaurantId: item.restaurantId, items: merged);
@@ -53,6 +54,7 @@ class CartController extends Notifier<CartState> {
         name: line.name,
         unitPriceMinor: line.unitPriceMinor,
         quantity: quantity,
+        imageUrl: line.imageUrl,
       );
     }
     state = state.copyWith(items: items);

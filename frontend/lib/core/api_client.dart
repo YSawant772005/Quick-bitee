@@ -18,7 +18,8 @@ class ApiClient {
   set token(String? value) => _token = value;
 
   void attachAuthHeader() {
-    _dio.options.headers['Authorization'] = _token == null ? null : 'Bearer $_token';
+    _dio.options.headers['Authorization'] =
+        _token == null ? null : 'Bearer $_token';
   }
 
   Future<Response<T>> _guard<T>(Future<Response<T>> Function() call) async {
@@ -43,16 +44,21 @@ class ApiClient {
     final status = e.response?.statusCode ?? 0;
     if (status == 401) {
       onUnauthorized?.call();
-      return ApiException(401, 'UNAUTHENTICATED', 'Your session has expired. Sign in again.');
+      return ApiException(
+          401, 'UNAUTHENTICATED', 'Your session has expired. Sign in again.');
     }
-    if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout) {
-      return ApiException(0, 'TIMEOUT', 'The request timed out. You can safely retry.');
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout) {
+      return ApiException(
+          0, 'TIMEOUT', 'The request timed out. You can safely retry.');
     }
     if (e.error is ApiException) return e.error as ApiException;
-    return ApiException(status, 'NETWORK', 'Network error. Check your connection.');
+    return ApiException(
+        status, 'NETWORK', 'Network error. Check your connection.');
   }
 
-  Future<AuthSession> login({required String email, required String password}) async {
+  Future<AuthSession> login(
+      {required String email, required String password}) async {
     final resp = await _guard(() => _dio.post<Map<String, dynamic>>(
           '/auth/login',
           data: {'email': email, 'password': password},
@@ -70,10 +76,20 @@ class ApiClient {
     return User.fromJson(resp.data!);
   }
 
-  Future<Paginated<Restaurant>> restaurants({int page = 1, int pageSize = 20, String? search}) async {
+  Future<Paginated<Restaurant>> restaurants({
+    int page = 1,
+    int pageSize = 20,
+    String? search,
+    String? category,
+  }) async {
     final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
           '/restaurants',
-          queryParameters: {'page': page, 'page_size': pageSize, if (search != null && search.isNotEmpty) 'search': search},
+          queryParameters: {
+            'page': page,
+            'page_size': pageSize,
+            if (search != null && search.isNotEmpty) 'search': search,
+            if (category != null && category.isNotEmpty) 'category': category,
+          },
         ));
     final data = resp.data!;
     return Paginated(
@@ -84,7 +100,38 @@ class ApiClient {
     );
   }
 
-  Future<Paginated<MenuItem>> menu(String restaurantId, {int page = 1, int pageSize = 50}) async {
+  /// Loads the complete matching restaurant set for catalogue screens.
+  ///
+  /// The API remains paginated (and this method still honours its filters),
+  /// but callers that render a catalogue must not silently lose entries after
+  /// the first 100 rows.
+  Future<Paginated<Restaurant>> allRestaurants({
+    String? search,
+    String? category,
+  }) async {
+    const pageSize = 100;
+    final first = await restaurants(
+      pageSize: pageSize,
+      search: search,
+      category: category,
+    );
+    if (first.totalPages <= 1) return first;
+    final items = <Restaurant>[...first.items];
+    for (var page = 2; page <= first.totalPages; page++) {
+      final next = await restaurants(
+        page: page,
+        pageSize: pageSize,
+        search: search,
+        category: category,
+      );
+      items.addAll(next.items);
+    }
+    return Paginated(
+        items: items, page: 1, pageSize: items.length, total: first.total);
+  }
+
+  Future<Paginated<MenuItem>> menu(String restaurantId,
+      {int page = 1, int pageSize = 50}) async {
     final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
           '/restaurants/$restaurantId/menu',
           queryParameters: {'page': page, 'page_size': pageSize},
@@ -92,6 +139,43 @@ class ApiClient {
     final data = resp.data!;
     return Paginated(
       items: [for (final j in data['items']) MenuItem.fromJson(j)],
+      page: data['page'],
+      pageSize: data['page_size'],
+      total: data['total'],
+    );
+  }
+
+  Future<Paginated<MenuItem>> allMenu(String restaurantId) async {
+    const pageSize = 100;
+    final first = await menu(restaurantId, pageSize: pageSize);
+    if (first.totalPages <= 1) return first;
+    final items = <MenuItem>[...first.items];
+    for (var page = 2; page <= first.totalPages; page++) {
+      final next = await menu(restaurantId, page: page, pageSize: pageSize);
+      items.addAll(next.items);
+    }
+    return Paginated(
+        items: items, page: 1, pageSize: items.length, total: first.total);
+  }
+
+  Future<Paginated<Dish>> dishes({
+    int page = 1,
+    int pageSize = 12,
+    String? search,
+    String sort = 'popular',
+  }) async {
+    final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
+          '/dishes',
+          queryParameters: {
+            'page': page,
+            'page_size': pageSize,
+            'sort': sort,
+            if (search != null && search.isNotEmpty) 'search': search,
+          },
+        ));
+    final data = resp.data!;
+    return Paginated(
+      items: [for (final j in data['items']) Dish.fromJson(j)],
       page: data['page'],
       pageSize: data['page_size'],
       total: data['total'],
@@ -116,7 +200,8 @@ class ApiClient {
     return OrderAccepted.fromJson(resp.data!);
   }
 
-  Future<Paginated<OrderListItem>> orders({int page = 1, int pageSize = 10}) async {
+  Future<Paginated<OrderListItem>> orders(
+      {int page = 1, int pageSize = 10}) async {
     final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
           '/orders',
           queryParameters: {'page': page, 'page_size': pageSize},
@@ -131,7 +216,8 @@ class ApiClient {
   }
 
   Future<OrderDetail> order(String id) async {
-    final resp = await _guard(() => _dio.get<Map<String, dynamic>>('/orders/$id'));
+    final resp =
+        await _guard(() => _dio.get<Map<String, dynamic>>('/orders/$id'));
     return OrderDetail.fromJson(resp.data!);
   }
 
@@ -149,7 +235,8 @@ class ApiClient {
     );
   }
 
-  Future<Paginated<AppNotification>> notifications({int page = 1, int pageSize = 20}) async {
+  Future<Paginated<AppNotification>> notifications(
+      {int page = 1, int pageSize = 20}) async {
     final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
           '/notifications',
           queryParameters: {'page': page, 'page_size': pageSize},
@@ -163,22 +250,197 @@ class ApiClient {
     );
   }
 
-  Future<Paginated<OrderListItem>> adminOrders({int page = 1, int pageSize = 20, String? status}) async {
-    final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
-          '/admin/orders',
-          queryParameters: {'page': page, 'page_size': pageSize, if (status != null && status.isNotEmpty) 'status': status},
-        ));
+  // -------------------------------------------------------------------------
+  // Admin console
+  // -------------------------------------------------------------------------
+
+  /// Generic paginated GET used by every admin list screen.
+  Future<Paginated<T>> _adminPage<T>(
+    String path,
+    Map<String, dynamic> params,
+    T Function(Map<String, dynamic>) fromJson,
+  ) async {
+    final resp = await _guard(
+        () => _dio.get<Map<String, dynamic>>(path, queryParameters: params));
     final data = resp.data!;
     return Paginated(
-      items: [for (final j in data['items']) OrderListItem.fromJson(j)],
+      items: [
+        for (final j in data['items']) fromJson(j as Map<String, dynamic>)
+      ],
       page: data['page'],
       pageSize: data['page_size'],
       total: data['total'],
     );
   }
 
-  Future<AdminSummary> adminSummary() async {
-    final resp = await _guard(() => _dio.get<Map<String, dynamic>>('/admin/summary'));
+  Map<String, dynamic> _rangeParams(String? dateFrom, String? dateTo,
+          {String? granularity}) =>
+      {
+        if (dateFrom != null && dateFrom.isNotEmpty) 'date_from': dateFrom,
+        if (dateTo != null && dateTo.isNotEmpty) 'date_to': dateTo,
+        if (granularity != null && granularity.isNotEmpty)
+          'granularity': granularity,
+      };
+
+  Future<Paginated<AdminOrderListItem>> adminOrders({
+    int page = 1,
+    int pageSize = 20,
+    String? status,
+    String? search,
+    String? dateFrom,
+    String? dateTo,
+    String sort = 'created_desc',
+  }) {
+    return _adminPage(
+      '/admin/orders',
+      {
+        'page': page,
+        'page_size': pageSize,
+        'sort': sort,
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (search != null && search.isNotEmpty) 'search': search,
+        ..._rangeParams(dateFrom, dateTo),
+      },
+      AdminOrderListItem.fromJson,
+    );
+  }
+
+  Future<AdminOrderDetail> adminOrder(String id) async {
+    final resp =
+        await _guard(() => _dio.get<Map<String, dynamic>>('/admin/orders/$id'));
+    return AdminOrderDetail.fromJson(resp.data!);
+  }
+
+  Future<AdminSummary> adminSummary(
+      {String? dateFrom, String? dateTo, String? granularity}) async {
+    final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
+          '/admin/summary',
+          queryParameters:
+              _rangeParams(dateFrom, dateTo, granularity: granularity),
+        ));
     return AdminSummary.fromJson(resp.data!);
+  }
+
+  Future<AdminAnalytics> adminAnalytics(
+      {String? dateFrom, String? dateTo, String? granularity}) async {
+    final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
+          '/admin/analytics',
+          queryParameters:
+              _rangeParams(dateFrom, dateTo, granularity: granularity),
+        ));
+    return AdminAnalytics.fromJson(resp.data!);
+  }
+
+  Future<Paginated<AdminRestaurant>> adminRestaurants({
+    int page = 1,
+    int pageSize = 20,
+    String? search,
+    bool? available,
+  }) {
+    return _adminPage(
+      '/admin/restaurants',
+      {
+        'page': page,
+        'page_size': pageSize,
+        if (search != null && search.isNotEmpty) 'search': search,
+        if (available != null) 'available': available,
+      },
+      AdminRestaurant.fromJson,
+    );
+  }
+
+  Future<AdminRestaurant> adminUpdateRestaurant(
+    String id, {
+    bool? available,
+    String? name,
+    String? description,
+    String? cuisine,
+    String? imageUrl,
+  }) async {
+    final resp = await _guard(() => _dio.patch<Map<String, dynamic>>(
+          '/admin/restaurants/$id',
+          data: {
+            if (available != null) 'available': available,
+            if (name != null) 'name': name,
+            if (description != null) 'description': description,
+            if (cuisine != null) 'cuisine': cuisine,
+            if (imageUrl != null) 'image_url': imageUrl,
+          },
+        ));
+    return AdminRestaurant.fromJson(resp.data!);
+  }
+
+  Future<Paginated<AdminMenuItem>> adminMenuItems({
+    int page = 1,
+    int pageSize = 20,
+    String? search,
+    String? restaurantId,
+    bool? available,
+  }) {
+    return _adminPage(
+      '/admin/menu-items',
+      {
+        'page': page,
+        'page_size': pageSize,
+        if (search != null && search.isNotEmpty) 'search': search,
+        if (restaurantId != null && restaurantId.isNotEmpty)
+          'restaurant_id': restaurantId,
+        if (available != null) 'available': available,
+      },
+      AdminMenuItem.fromJson,
+    );
+  }
+
+  Future<AdminMenuItem> adminUpdateMenuItem(
+    String id, {
+    bool? available,
+    int? priceMinor,
+    String? name,
+    String? description,
+    String? imageUrl,
+  }) async {
+    final resp = await _guard(() => _dio.patch<Map<String, dynamic>>(
+          '/admin/menu-items/$id',
+          data: {
+            if (available != null) 'available': available,
+            if (priceMinor != null) 'price_minor': priceMinor,
+            if (name != null) 'name': name,
+            if (description != null) 'description': description,
+            if (imageUrl != null) 'image_url': imageUrl,
+          },
+        ));
+    return AdminMenuItem.fromJson(resp.data!);
+  }
+
+  Future<Paginated<AdminCustomer>> adminCustomers({
+    int page = 1,
+    int pageSize = 20,
+    String? search,
+  }) {
+    return _adminPage(
+      '/admin/customers',
+      {
+        'page': page,
+        'page_size': pageSize,
+        if (search != null && search.isNotEmpty) 'search': search,
+      },
+      AdminCustomer.fromJson,
+    );
+  }
+
+  Future<Paginated<AdminDelivery>> adminDeliveries({
+    int page = 1,
+    int pageSize = 20,
+    String? search,
+  }) {
+    return _adminPage(
+      '/admin/deliveries',
+      {
+        'page': page,
+        'page_size': pageSize,
+        if (search != null && search.isNotEmpty) 'search': search,
+      },
+      AdminDelivery.fromJson,
+    );
   }
 }

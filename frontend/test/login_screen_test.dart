@@ -11,7 +11,7 @@ void main() {
       ),
     );
 
-    expect(find.text('QuickBite'), findsOneWidget);
+    expect(find.text('QuickBitee', findRichText: true), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
 
     await tester.tap(find.text('Sign in'));

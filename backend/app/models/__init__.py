@@ -1,5 +1,5 @@
 from app.db.base import Base
-from app.models.catalog import MenuItem, Restaurant
+from app.models.catalog import Category, MenuItem, MenuItemCategory, Restaurant
 from app.models.messaging import OutboxEvent, ProcessedEvent, QuarantineRecord, RetryJob
 from app.models.orders import (
     DriverAssignment,
@@ -17,6 +17,8 @@ __all__ = [
     "User",
     "Restaurant",
     "MenuItem",
+    "Category",
+    "MenuItemCategory",
     "Order",
     "OrderItem",
     "OrderStatusHistory",

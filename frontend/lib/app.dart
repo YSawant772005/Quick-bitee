@@ -26,7 +26,7 @@ class _QuickBiteAppState extends ConsumerState<QuickBiteApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'QuickBite',
+      title: 'QuickBitee',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: _router,
