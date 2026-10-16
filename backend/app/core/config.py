@@ -34,6 +34,25 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
+    #: Deployment environment. Demo promotions are only exposed outside production.
+    APP_ENV: str = "development"
+    #: Explicit override for the clearly-labelled demo banners/offers.
+    #: "true"/"false"; empty means "default on unless APP_ENV=production".
+    DEMO_PROMOTIONS_ENABLED: str = ""
+
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV.strip().lower() == "production"
+
+    @property
+    def demo_promotions_enabled(self) -> bool:
+        flag = self.DEMO_PROMOTIONS_ENABLED.strip().lower()
+        if flag in {"1", "true", "yes", "on"}:
+            return True
+        if flag in {"0", "false", "no", "off"}:
+            return False
+        return not self.is_production
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

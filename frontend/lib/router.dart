@@ -19,6 +19,7 @@ import 'features/explore/explore_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/menu/menu_screen.dart';
 import 'features/notifications/notifications_screen.dart';
+import 'features/offers/offers_screen.dart';
 import 'features/orders/order_detail_screen.dart';
 import 'features/orders/order_history_screen.dart';
 import 'features/profile/profile_screen.dart';
@@ -54,15 +55,24 @@ GoRouter buildRouter(AuthRefresher refresher, {String initialLocation = '/'}) =>
         GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
         GoRoute(
           path: '/explore',
-          builder: (context, state) => ExploreScreen(
-            initialQuery: state.uri.queryParameters['q'] ?? '',
-            initialCuisine: state.uri.queryParameters['cuisine'] ?? '',
-          ),
+          builder: (context, state) {
+            final qp = state.uri.queryParameters;
+            return ExploreScreen(
+              initialQuery: qp['q'] ?? '',
+              // `cuisine` (home category tiles) and `category` (carousel /
+              // offers) both select one catalogue category.
+              initialCategory: qp['cuisine'] ?? qp['category'] ?? '',
+              initialFoodType: qp['food_type'] ?? '',
+              initialSort: qp['sort'] ?? '',
+              initialView: qp['view'] ?? '',
+            );
+          },
         ),
         GoRoute(
           path: '/restaurant/:id',
           builder: (context, state) => MenuScreen(restaurantId: state.pathParameters['id']!),
         ),
+        GoRoute(path: '/offers', builder: (context, state) => const OffersScreen()),
         GoRoute(path: '/cart', builder: (context, state) => const CartScreen()),
         GoRoute(path: '/checkout', builder: (context, state) => const CheckoutScreen()),
         GoRoute(

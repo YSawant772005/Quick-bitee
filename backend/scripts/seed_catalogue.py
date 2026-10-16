@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,16 +23,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.catalog.build import build_catalogue  # noqa: E402
 from app.catalog import taxonomy  # noqa: E402
+from app.catalog.ids import stable_id  # noqa: E402
 from app.db.base import UUIDMixin  # noqa: E402
 from app.db.session import engine  # noqa: E402
 from app.models.catalog import Category, MenuItem, Restaurant, MenuItemCategory  # noqa: E402
 
-NAMESPACE = uuid.UUID("6fa459ea-ee8a-3ca4-894e-db77e160355e")  # fixed namespace
-
-
-def stable_id(*parts: str) -> str:
-    """Deterministic UUIDv5 from a stable string key."""
-    return str(uuid.uuid5(NAMESPACE, "|".join(parts)))
+#: Demo detail values for rows this script creates (see the migration for the
+#: same fallbacks applied to rows that already existed).
+DEMO_ADDRESS = "Delivery-only demo kitchen - no walk-in address"
+DEMO_HOURS = "11:00 AM - 11:00 PM, daily"
 
 
 @dataclass
@@ -102,6 +100,10 @@ async def seed(dry_run: bool = False) -> Stats:
                 cuisine=built.cuisine,
                 image_url=f"/static/catalog/{built.cover_food_type}.jpg",
                 available=True,
+                address=DEMO_ADDRESS,
+                opening_hours=DEMO_HOURS,
+                eta_minutes_min=25,
+                eta_minutes_max=45,
             ).on_conflict_do_update(
                 index_elements=["name"],  # unique constraint is on name
                 set_=dict(

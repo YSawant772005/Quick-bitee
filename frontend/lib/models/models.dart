@@ -28,6 +28,29 @@ class AuthSession {
   final User user;
 }
 
+/// A category label attached to a dish: the restaurant's own menu section
+/// (`kind == 'menu'`) or a cross-restaurant global tag (`kind == 'global'`).
+class CategoryTag {
+  const CategoryTag({required this.slug, required this.name, this.kind = 'global'});
+
+  final String slug;
+  final String name;
+  final String kind;
+
+  bool get isMenuSection => kind == 'menu';
+
+  factory CategoryTag.fromJson(Map<String, dynamic> j) => CategoryTag(
+        slug: j['slug']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        kind: j['kind']?.toString() ?? 'global',
+      );
+
+  static List<CategoryTag> listFrom(dynamic raw) => [
+        for (final t in (raw as List? ?? const []))
+          if (t is Map<String, dynamic>) CategoryTag.fromJson(t),
+      ];
+}
+
 class Restaurant {
   Restaurant({
     required this.id,
@@ -36,6 +59,16 @@ class Restaurant {
     required this.cuisine,
     required this.imageUrl,
     required this.available,
+    this.address = '',
+    this.openingHours = '',
+    this.etaMinMinutes,
+    this.etaMaxMinutes,
+    this.rating,
+    this.reviewCount,
+    this.orderCount = 0,
+    this.dishCount = 0,
+    this.categories = const [],
+    this.offers = const [],
   });
 
   final String id;
@@ -45,13 +78,63 @@ class Restaurant {
   final String imageUrl;
   final bool available;
 
+  /// Delivery-only demo kitchens publish no walk-in address; empty means
+  /// "unknown" and the UI omits the row entirely.
+  final String address;
+  final String openingHours;
+
+  /// Estimated delivery window in minutes; null when the backend has none.
+  final int? etaMinMinutes;
+  final int? etaMaxMinutes;
+
+  /// Star rating and review count. Both are null until real review data
+  /// exists — the UI must hide them rather than show a placeholder score.
+  final double? rating;
+  final int? reviewCount;
+
+  /// Real units sold (successful orders) and published dish count.
+  final int orderCount;
+  final int dishCount;
+
+  /// Most common global food categories, e.g. ["Biryani", "North Indian"].
+  final List<String> categories;
+
+  /// Titles of configured promotions naming this restaurant (demo offers).
+  final List<String> offers;
+
+  bool get hasRating => rating != null && (reviewCount ?? 0) > 0;
+
+  String? get ratingLabel => rating?.toStringAsFixed(1);
+
+  /// "25–40 min" when a window is known, else null.
+  String? get etaLabel {
+    final low = etaMinMinutes;
+    final high = etaMaxMinutes;
+    if (low == null || high == null) return null;
+    return '$low–$high min';
+  }
+
   factory Restaurant.fromJson(Map<String, dynamic> j) => Restaurant(
         id: j['id'],
         name: j['name'],
-        description: j['description'],
-        cuisine: j['cuisine'],
-        imageUrl: j['image_url'],
-        available: j['available'],
+        description: j['description'] ?? '',
+        cuisine: j['cuisine'] ?? '',
+        imageUrl: j['image_url'] ?? '',
+        available: j['available'] ?? true,
+        address: j['address'] ?? '',
+        openingHours: j['opening_hours'] ?? '',
+        etaMinMinutes: (j['eta_minutes_min'] as num?)?.toInt(),
+        etaMaxMinutes: (j['eta_minutes_max'] as num?)?.toInt(),
+        rating: (j['rating'] as num?)?.toDouble(),
+        reviewCount: (j['review_count'] as num?)?.toInt(),
+        orderCount: (j['order_count'] as num?)?.toInt() ?? 0,
+        dishCount: (j['dish_count'] as num?)?.toInt() ?? 0,
+        categories: [
+          for (final c in (j['categories'] as List? ?? const [])) c.toString(),
+        ],
+        offers: [
+          for (final o in (j['offers'] as List? ?? const [])) o.toString(),
+        ],
       );
 }
 
@@ -65,6 +148,9 @@ class MenuItem {
     required this.currency,
     required this.imageUrl,
     required this.available,
+    this.isVeg,
+    this.tags = const [],
+    this.orderCount = 0,
   });
 
   final String id;
@@ -76,15 +162,30 @@ class MenuItem {
   final String imageUrl;
   final bool available;
 
+  /// Vegetarian indicator derived from real diet tags; null when the dish
+  /// carries no diet tag (nothing may be assumed).
+  final bool? isVeg;
+
+  /// Menu section + global category labels.
+  final List<CategoryTag> tags;
+
+  /// Real units sold (successful orders) — 0 when never ordered.
+  final int orderCount;
+
+  bool get hasMenuSection => tags.any((t) => t.isMenuSection);
+
   factory MenuItem.fromJson(Map<String, dynamic> j) => MenuItem(
         id: j['id'],
         restaurantId: j['restaurant_id'],
         name: j['name'],
-        description: j['description'],
+        description: j['description'] ?? '',
         priceMinor: j['price_minor'],
-        currency: j['currency'],
-        imageUrl: j['image_url'],
-        available: j['available'],
+        currency: j['currency'] ?? 'INR',
+        imageUrl: j['image_url'] ?? '',
+        available: j['available'] ?? true,
+        isVeg: j['is_veg'] as bool?,
+        tags: CategoryTag.listFrom(j['tags']),
+        orderCount: (j['order_count'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -112,6 +213,8 @@ class Dish {
     required this.imageUrl,
     required this.available,
     required this.orderCount,
+    this.isVeg,
+    this.tags = const [],
   });
 
   final String id;
@@ -124,18 +227,22 @@ class Dish {
   final String imageUrl;
   final bool available;
   final int orderCount;
+  final bool? isVeg;
+  final List<CategoryTag> tags;
 
   factory Dish.fromJson(Map<String, dynamic> j) => Dish(
         id: j['id'],
         restaurantId: j['restaurant_id'],
         restaurantName: j['restaurant_name'] ?? '',
         name: j['name'],
-        description: j['description'],
+        description: j['description'] ?? '',
         priceMinor: j['price_minor'],
-        currency: j['currency'],
+        currency: j['currency'] ?? 'INR',
         imageUrl: j['image_url'] ?? '',
         available: j['available'] ?? true,
         orderCount: j['order_count'] ?? 0,
+        isVeg: j['is_veg'] as bool?,
+        tags: CategoryTag.listFrom(j['tags']),
       );
 
   /// Converts to a cart menu item so a dish card can add straight to the cart.
@@ -148,6 +255,122 @@ class Dish {
         currency: currency,
         imageUrl: imageUrl,
         available: available,
+        isVeg: isVeg,
+        tags: tags,
+        orderCount: orderCount,
+      );
+}
+
+/// One homepage / promotions banner.
+///
+/// [isDemo] promotions are development-only: the UI must badge them and never
+/// imply a discount that checkout will not apply.
+class PromoBanner {
+  PromoBanner({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+    required this.ctaLabel,
+    required this.target,
+    this.cta = const {},
+    this.accent,
+    this.badge,
+    this.isDemo = false,
+  });
+
+  final String id;
+  final String title;
+  final String subtitle;
+  final String imageUrl;
+  final String ctaLabel;
+
+  /// In-app route form of the CTA (also available structured in [cta]).
+  final String target;
+  final Map<String, dynamic> cta;
+  final String? accent;
+  final String? badge;
+  final bool isDemo;
+
+  factory PromoBanner.fromJson(Map<String, dynamic> j) => PromoBanner(
+        id: j['id']?.toString() ?? '',
+        title: j['title']?.toString() ?? '',
+        subtitle: j['subtitle']?.toString() ?? '',
+        imageUrl: j['image_url']?.toString() ?? '',
+        ctaLabel: j['cta_label']?.toString() ?? '',
+        target: j['target']?.toString() ?? '',
+        cta: (j['cta'] as Map?)?.cast<String, dynamic>() ?? const {},
+        accent: j['accent']?.toString(),
+        badge: j['badge']?.toString(),
+        isDemo: j['is_demo'] == true,
+      );
+}
+
+/// One offers-page entry. [disclosure] states plainly that no discount is
+/// applied at checkout and must be shown to the customer.
+class Offer {
+  Offer({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.kind,
+    required this.imageUrl,
+    required this.ctaLabel,
+    required this.target,
+    this.cta = const {},
+    this.accent,
+    this.badge,
+    this.disclosure,
+    this.isDemo = false,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String kind;
+  final String imageUrl;
+  final String ctaLabel;
+  final String target;
+  final Map<String, dynamic> cta;
+  final String? accent;
+  final String? badge;
+  final String? disclosure;
+  final bool isDemo;
+
+  factory Offer.fromJson(Map<String, dynamic> j) => Offer(
+        id: j['id']?.toString() ?? '',
+        title: j['title']?.toString() ?? '',
+        description: j['description']?.toString() ?? '',
+        kind: j['kind']?.toString() ?? 'general',
+        imageUrl: j['image_url']?.toString() ?? '',
+        ctaLabel: j['cta_label']?.toString() ?? '',
+        target: j['target']?.toString() ?? '/offers',
+        cta: (j['cta'] as Map?)?.cast<String, dynamic>() ?? const {},
+        accent: j['accent']?.toString(),
+        badge: j['badge']?.toString(),
+        disclosure: j['disclosure']?.toString(),
+        isDemo: j['is_demo'] == true,
+      );
+}
+
+/// Banner + offer payload from `GET /promotions`.
+class Promotions {
+  const Promotions({this.banners = const [], this.offers = const []});
+
+  final List<PromoBanner> banners;
+  final List<Offer> offers;
+
+  bool get isEmpty => banners.isEmpty && offers.isEmpty;
+
+  factory Promotions.fromJson(Map<String, dynamic> j) => Promotions(
+        banners: [
+          for (final b in (j['banners'] as List? ?? const []))
+            if (b is Map<String, dynamic>) PromoBanner.fromJson(b),
+        ],
+        offers: [
+          for (final o in (j['offers'] as List? ?? const []))
+            if (o is Map<String, dynamic>) Offer.fromJson(o),
+        ],
       );
 }
 

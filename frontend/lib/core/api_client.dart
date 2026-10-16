@@ -81,6 +81,8 @@ class ApiClient {
     int pageSize = 20,
     String? search,
     String? category,
+    String? foodType,
+    String? sort,
   }) async {
     final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
           '/restaurants',
@@ -89,6 +91,8 @@ class ApiClient {
             'page_size': pageSize,
             if (search != null && search.isNotEmpty) 'search': search,
             if (category != null && category.isNotEmpty) 'category': category,
+            if (foodType != null && foodType.isNotEmpty) 'food_type': foodType,
+            if (sort != null && sort.isNotEmpty) 'sort': sort,
           },
         ));
     final data = resp.data!;
@@ -108,12 +112,16 @@ class ApiClient {
   Future<Paginated<Restaurant>> allRestaurants({
     String? search,
     String? category,
+    String? foodType,
+    String? sort,
   }) async {
     const pageSize = 100;
     final first = await restaurants(
       pageSize: pageSize,
       search: search,
       category: category,
+      foodType: foodType,
+      sort: sort,
     );
     if (first.totalPages <= 1) return first;
     final items = <Restaurant>[...first.items];
@@ -123,6 +131,8 @@ class ApiClient {
         pageSize: pageSize,
         search: search,
         category: category,
+        foodType: foodType,
+        sort: sort,
       );
       items.addAll(next.items);
     }
@@ -130,11 +140,42 @@ class ApiClient {
         items: items, page: 1, pageSize: items.length, total: first.total);
   }
 
-  Future<Paginated<MenuItem>> menu(String restaurantId,
-      {int page = 1, int pageSize = 50}) async {
+  /// Full detail payload for one restaurant (address, hours, ETA, rating…).
+  ///
+  /// Throws an [ApiException] when the server returns an unexpected payload
+  /// (e.g. the generic list envelope), so callers can fall back gracefully
+  /// instead of rendering a half-built restaurant.
+  Future<Restaurant> restaurantDetail(String restaurantId) async {
+    final resp = await _guard(() =>
+        _dio.get<Map<String, dynamic>>('/restaurants/$restaurantId'));
+    final data = resp.data;
+    final id = data?['id'];
+    if (data == null || id is! String || id.isEmpty) {
+      throw ApiException(
+          200, 'INVALID_RESPONSE', 'Restaurant details unavailable.');
+    }
+    return Restaurant.fromJson(data);
+  }
+
+  Future<Paginated<MenuItem>> menu(
+    String restaurantId, {
+    int page = 1,
+    int pageSize = 50,
+    String? search,
+    String? foodType,
+    String? category,
+    String? sort,
+  }) async {
     final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
           '/restaurants/$restaurantId/menu',
-          queryParameters: {'page': page, 'page_size': pageSize},
+          queryParameters: {
+            'page': page,
+            'page_size': pageSize,
+            if (search != null && search.isNotEmpty) 'search': search,
+            if (foodType != null && foodType.isNotEmpty) 'food_type': foodType,
+            if (category != null && category.isNotEmpty) 'category': category,
+            if (sort != null && sort.isNotEmpty) 'sort': sort,
+          },
         ));
     final data = resp.data!;
     return Paginated(
@@ -145,13 +186,30 @@ class ApiClient {
     );
   }
 
-  Future<Paginated<MenuItem>> allMenu(String restaurantId) async {
+  Future<Paginated<MenuItem>> allMenu(
+    String restaurantId, {
+    String? search,
+    String? foodType,
+    String? category,
+    String? sort,
+  }) async {
     const pageSize = 100;
-    final first = await menu(restaurantId, pageSize: pageSize);
+    final first = await menu(restaurantId,
+        pageSize: pageSize,
+        search: search,
+        foodType: foodType,
+        category: category,
+        sort: sort);
     if (first.totalPages <= 1) return first;
     final items = <MenuItem>[...first.items];
     for (var page = 2; page <= first.totalPages; page++) {
-      final next = await menu(restaurantId, page: page, pageSize: pageSize);
+      final next = await menu(restaurantId,
+          page: page,
+          pageSize: pageSize,
+          search: search,
+          foodType: foodType,
+          category: category,
+          sort: sort);
       items.addAll(next.items);
     }
     return Paginated(
@@ -163,6 +221,8 @@ class ApiClient {
     int pageSize = 12,
     String? search,
     String sort = 'popular',
+    String? category,
+    String? foodType,
   }) async {
     final resp = await _guard(() => _dio.get<Map<String, dynamic>>(
           '/dishes',
@@ -171,6 +231,8 @@ class ApiClient {
             'page_size': pageSize,
             'sort': sort,
             if (search != null && search.isNotEmpty) 'search': search,
+            if (category != null && category.isNotEmpty) 'category': category,
+            if (foodType != null && foodType.isNotEmpty) 'food_type': foodType,
           },
         ));
     final data = resp.data!;
@@ -180,6 +242,45 @@ class ApiClient {
       pageSize: data['page_size'],
       total: data['total'],
     );
+  }
+
+  /// Dish-first browsing across every restaurant, paged through completely so a
+  /// catalogue screen never silently drops rows after the first API page.
+  Future<Paginated<Dish>> allDishes({
+    String? search,
+    String? category,
+    String? foodType,
+    String sort = 'popular',
+  }) async {
+    const pageSize = 100;
+    final first = await dishes(
+        pageSize: pageSize,
+        search: search,
+        category: category,
+        foodType: foodType,
+        sort: sort);
+    if (first.totalPages <= 1) return first;
+    final items = <Dish>[...first.items];
+    for (var page = 2; page <= first.totalPages; page++) {
+      final next = await dishes(
+          page: page,
+          pageSize: pageSize,
+          search: search,
+          category: category,
+          foodType: foodType,
+          sort: sort);
+      items.addAll(next.items);
+    }
+    return Paginated(
+        items: items, page: 1, pageSize: items.length, total: first.total);
+  }
+
+  /// Homepage banners + offers. Missing/empty payloads degrade to an empty set,
+  /// so a stripped-down or older backend never breaks the home screen.
+  Future<Promotions> promotions() async {
+    final resp =
+        await _guard(() => _dio.get<Map<String, dynamic>>('/promotions'));
+    return Promotions.fromJson(resp.data ?? const {});
   }
 
   Future<OrderAccepted> placeOrder({

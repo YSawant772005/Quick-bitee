@@ -23,6 +23,19 @@ class Restaurant(UUIDMixin, TimestampMixin, Base):
     image_url: Mapped[str] = mapped_column(String(500), default="")
     available: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    #: Demo catalogue details. The platform publishes no walk-in addresses, so
+    #: the seeder stores an explicit "delivery-only" note rather than a made-up
+    #: street. Never blank on seeded rows; the API still treats "" as missing.
+    address: Mapped[str] = mapped_column(String(300), default="")
+    opening_hours: Mapped[str] = mapped_column(String(200), default="")
+    #: Estimated delivery window in minutes (seeded catalogue value).
+    eta_minutes_min: Mapped[int] = mapped_column(Integer, default=25)
+    eta_minutes_max: Mapped[int] = mapped_column(Integer, default=45)
+    #: Star rating and review count — NULL while no review data exists.
+    #: These are never fabricated; the API omits them when unset.
+    rating: Mapped[float | None] = mapped_column(nullable=True)
+    review_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     menu_items: Mapped[list["MenuItem"]] = relationship(back_populates="restaurant")
 
     #: Menu sections only (`kind == "menu"`), ordered for display.

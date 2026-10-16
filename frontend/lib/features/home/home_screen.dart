@@ -4,9 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/models.dart';
 import '../../shared/cards.dart';
-import '../../shared/cart_actions.dart';
 import '../../shared/catalog_meta.dart';
 import '../../shared/layout.dart';
+import '../../shared/paged_list.dart';
+import '../../shared/promo_carousel.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets.dart';
 import '../../state/auth_controller.dart';
@@ -21,22 +22,83 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _searchController = TextEditingController();
+  final _scroll = ScrollController();
+  final _listKey = GlobalKey();
+  final _dishesFooterKey = GlobalKey();
+  final _restFooterKey = GlobalKey();
   List<Restaurant> _restaurants = const [];
-  List<Dish> _popularDishes = const [];
+  Promotions _promotions = const Promotions();
   bool _loading = true;
-  bool _dishesLoading = true;
   String? _error;
+
+  /// "Popular right now" — paged by the backend.
+  late final PagedListController<Dish> _popularPaged;
+
+  /// "Restaurants near you" — the catalogue is fetched whole, then sliced.
+  late final PagedListController<Restaurant> _restPaged;
 
   @override
   void initState() {
     super.initState();
+    _popularPaged = PagedListController<Dish>(idOf: (d) => d.id, pageSize: 12);
+    _restPaged = PagedListController<Restaurant>(
+      idOf: (r) => r.id,
+      pageSize: 12,
+      local: const [],
+    );
+    _popularPaged.addListener(_onPagedChanged);
+    _restPaged.addListener(_onPagedChanged);
     _load();
   }
 
   @override
   void dispose() {
+    _popularPaged.removeListener(_onPagedChanged);
+    _restPaged.removeListener(_onPagedChanged);
+    _popularPaged.dispose();
+    _restPaged.dispose();
     _searchController.dispose();
+    _scroll.dispose();
     super.dispose();
+  }
+
+  void _onPagedChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _maybeLoadMore();
+  }
+
+  /// Infinite mode: when the nearest section footer approaches the viewport
+  /// bottom, load the next slice. Controllers ignore duplicate calls.
+  void _maybeLoadMore() {
+    if (!mounted) return;
+    if (ref.read(browseModeProvider) != BrowseMode.infinite) return;
+    // Prefer the dish section while it still has pages, then restaurants.
+    if (!_popularPaged.busy && _popularPaged.hasMore) {
+      scheduleNearBottomLoad(
+        anchorKey: _dishesFooterKey,
+        scrollableKey: _listKey,
+        onLoadMore: _popularPaged.loadMore,
+      );
+      return;
+    }
+    if (!_restPaged.busy && _restPaged.hasMore) {
+      scheduleNearBottomLoad(
+        anchorKey: _restFooterKey,
+        scrollableKey: _listKey,
+        onLoadMore: _restPaged.loadMore,
+      );
+    }
+  }
+
+  void _scrollToTop() {
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -52,6 +114,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _restaurants = restaurants.items;
         _loading = false;
       });
+      _restPaged.setLocalItems(_restaurants);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
       if (mounted) setState(() => _loading = false);
@@ -59,22 +122,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (mounted) setState(() => _error = 'Network error');
       if (mounted) setState(() => _loading = false);
     }
+    await _loadPromotions();
     await _loadDishes();
   }
 
-  Future<void> _loadDishes() async {
-    setState(() => _dishesLoading = true);
+  Future<void> _loadPromotions() async {
     try {
-      final dishes = await ref
-          .read(apiClientProvider)
-          .dishes(pageSize: 8, sort: 'popular');
-      if (mounted) setState(() => _popularDishes = dishes.items);
+      final promotions = await ref.read(apiClientProvider).promotions();
+      if (mounted) setState(() => _promotions = promotions);
     } catch (_) {
-      // Non-fatal: the rest of the home page still renders.
-      if (mounted) setState(() => _popularDishes = const []);
-    } finally {
-      if (mounted) setState(() => _dishesLoading = false);
+      // Non-fatal: the homepage renders fine without promotions.
+      if (mounted) setState(() => _promotions = const Promotions());
     }
+  }
+
+  Future<void> _loadDishes() async {
+    _popularPaged.updateFetch(
+      (page, pageSize) => ref
+          .read(apiClientProvider)
+          .dishes(page: page, pageSize: pageSize, sort: 'popular'),
+    );
   }
 
   void _search() {
@@ -82,25 +149,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     context.go(q.isEmpty ? '/explore' : '/explore?q=${Uri.encodeComponent(q)}');
   }
 
-  List<String> get _cuisines {
+  /// Cuisines plus global dish categories, so the home tiles surface both
+  /// "Biryani" style cuisine and cross-restaurant labels like "Desserts".
+  List<String> get _categories {
     final seen = <String>{};
     for (final r in _restaurants) {
-      if (r.cuisine.trim().isNotEmpty) seen.add(r.cuisine);
+      if (r.cuisine.trim().isNotEmpty) seen.add(r.cuisine.trim());
+      for (final c in r.categories) {
+        if (c.trim().isNotEmpty) seen.add(c.trim());
+      }
     }
     return seen.toList();
+  }
+
+  /// Restaurants with genuine rating data only — never a fabricated score.
+  List<Restaurant> get _topRated {
+    final rated = _restaurants.where((r) => r.hasRating).toList()
+      ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+    return rated.take(6).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
+    final browseMode = ref.watch(browseModeProvider);
+    ref.listen(browseModeProvider, (_, __) {
+      if (!_popularPaged.isEmpty) _popularPaged.refresh();
+      if (_restaurants.isNotEmpty) _restPaged.setLocalItems(_restaurants);
+    });
     return CustomerShell(
       navIndex: 0,
       title: 'QuickBitee',
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollEndNotification) _maybeLoadMore();
+            return false;
+          },
+          child: ListView(
+            key: _listKey,
+            controller: _scroll,
+            padding: EdgeInsets.zero,
+            children: [
             _Hero(
                 searchController: _searchController,
                 onSearch: _search,
@@ -112,19 +203,93 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: ErrorState(message: _error!, onRetry: _load),
               )
             else ...[
-              ContentWidth(
-                  child: _Categories(cuisines: _cuisines, loading: _loading)),
+              if (_promotions.banners.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xxl),
+                ContentWidth(
+                  child: PromoCarousel(banners: _promotions.banners),
+                ),
+              ],
               const SizedBox(height: AppSpacing.xxl),
+              ContentWidth(
+                  child: _Categories(cuisines: _categories, loading: _loading)),
+              const SizedBox(height: AppSpacing.xxl),
+              if (_promotions.offers.isNotEmpty) ...[
+                ContentWidth(
+                  child: _OffersStrip(offers: _promotions.offers),
+                ),
+                const SizedBox(height: AppSpacing.xxl),
+              ],
+              if (_topRated.isNotEmpty) ...[
+                ContentWidth(
+                  child: Column(
+                    children: [
+                      SectionHeader(
+                        title: 'Top rated near you',
+                        subtitle: 'Highest customer ratings',
+                        onSeeAll: () =>
+                            context.go('/explore?sort=rating'),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      ResponsiveWrap(
+                        minItemWidth: 300,
+                        children: [
+                          for (final r in _topRated)
+                            RestaurantCard(
+                                restaurant: r,
+                                onTap: () =>
+                                    context.push('/restaurant/${r.id}')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xxl),
+              ],
+              ContentWidth(child: const _BrowseControls()),
+              const SizedBox(height: AppSpacing.lg),
               ContentWidth(
                 child: Column(
                   children: [
                     SectionHeader(
                       title: 'Popular right now',
                       subtitle: 'Dishes customers are ordering the most',
-                      onSeeAll: () => context.go('/explore'),
+                      onSeeAll: () => context.go('/explore?view=dishes'),
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    _DishGrid(dishes: _popularDishes, loading: _dishesLoading),
+                    if (_popularPaged.loading)
+                      ResponsiveWrap(
+                        minItemWidth: 240,
+                        children: List.generate(
+                            4, (_) => const SkeletonCard(imageHeight: 150)),
+                      )
+                    else ...[
+                      DishGrid(
+                        minItemWidth: 240,
+                        dishes: [
+                          for (final d in _popularPaged.items)
+                            DishCardData.fromDish(d),
+                        ],
+                        emptyTitle: 'No popular dishes yet',
+                        emptySubtitle:
+                            'Once orders start coming in, the top dishes appear here.',
+                        emptyAction: FilledButton(
+                          onPressed: () => context.go('/explore'),
+                          child: const Text('Browse restaurants'),
+                        ),
+                      ),
+                      KeyedSubtree(
+                        key: _dishesFooterKey,
+                        child: PagedResultsFooter(
+                          controller: _popularPaged,
+                          mode: browseMode,
+                          endLabel: 'That’s all the popular picks',
+                          onPageChanged: (page) {
+                            _popularPaged.goToPage(page);
+                            _scrollToTop();
+                          },
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -152,17 +317,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               'The catalog is empty right now. Pull to refresh.',
                         ),
                       )
-                    else
+                    else ...[
                       ResponsiveWrap(
                         minItemWidth: 300,
                         children: [
-                          for (final r in _restaurants)
+                          for (final r in _restPaged.items)
                             RestaurantCard(
                                 restaurant: r,
                                 onTap: () =>
                                     context.push('/restaurant/${r.id}')),
                         ],
                       ),
+                      KeyedSubtree(
+                        key: _restFooterKey,
+                        child: PagedResultsFooter(
+                          controller: _restPaged,
+                          mode: browseMode,
+                          endLabel: 'That’s every restaurant nearby',
+                          onPageChanged: (page) {
+                            _restPaged.goToPage(page);
+                            _scrollToTop();
+                          },
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -181,6 +359,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           : 96),
           ],
         ),
+        ),
       ),
       floatingActionButton: cart.isEmpty
           ? null
@@ -192,6 +371,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               label: Text(
                   '${cart.totalQuantity} · ${formatMinor(cart.subtotalMinor)}'),
             ),
+    );
+  }
+}
+
+/// The single, shared browsing-mode control for the home page.
+///
+/// It sits between the two listing sections rather than inside either one, so
+/// it is unambiguous that the choice applies to *both* "Popular right now" and
+/// "Restaurants near you" while their data and pagination stay independent.
+class _BrowseControls extends StatelessWidget {
+  const _BrowseControls();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Browse dishes & restaurants',
+            style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 2),
+        Text(
+          'Infinite scroll or numbered pages — one setting for both lists below.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        const BrowseModeToggle(),
+      ],
     );
   }
 }
@@ -386,8 +592,8 @@ class _Categories extends StatelessWidget {
             subtitle: 'Pick a craving and dive in'),
         const SizedBox(height: AppSpacing.lg),
         if (loading)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          HorizontalChipScroller(
+            semanticLabel: 'Browse by category',
             child: Row(
               children: List.generate(
                 6,
@@ -403,8 +609,8 @@ class _Categories extends StatelessWidget {
           const Text('Categories appear once the catalog loads.',
               style: TextStyle(color: AppColors.textSecondary))
         else
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          HorizontalChipScroller(
+            semanticLabel: 'Browse by category',
             child: Row(
               children: [
                 for (final cuisine in cuisines)
@@ -489,62 +695,93 @@ class _CategoryTile extends StatelessWidget {
   }
 }
 
-class _DishGrid extends ConsumerWidget {
-  const _DishGrid({required this.dishes, required this.loading});
+class _OffersStrip extends StatelessWidget {
+  const _OffersStrip({required this.offers});
 
-  final List<Dish> dishes;
-  final bool loading;
+  final List<Offer> offers;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (loading) {
-      return ResponsiveWrap(
-        minItemWidth: 240,
-        children: List.generate(4, (_) => const SkeletonCard(imageHeight: 150)),
-      );
-    }
-    if (dishes.isEmpty) {
-      return AppCard(
-        child: EmptyState(
-          icon: Icons.ramen_dining_outlined,
-          title: 'No popular dishes yet',
-          subtitle: 'Once orders start coming in, the top dishes appear here.',
-          action: FilledButton(
-            onPressed: () => context.go('/explore'),
-            child: const Text('Browse restaurants'),
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: 'Offers for you',
+          subtitle: 'Demo promotions — no discount is applied at checkout',
+          seeAllLabel: 'All offers',
+          onSeeAll: () => context.go('/offers'),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        HorizontalChipScroller(
+          semanticLabel: 'Offers',
+          child: Row(
+            children: [
+              for (final offer in offers)
+                Padding(
+                  padding: const EdgeInsets.only(right: AppSpacing.md),
+                  child: _OfferMiniCard(
+                    offer: offer,
+                    onTap: () => context
+                        .go(offer.target.isEmpty ? '/offers' : offer.target),
+                  ),
+                ),
+            ],
           ),
         ),
-      );
-    }
-    final cart = ref.watch(cartProvider);
-    return ResponsiveWrap(
-      minItemWidth: 240,
-      children: [
-        for (final dish in dishes)
-          Builder(
-            builder: (context) {
-              final line = cart.items[dish.id];
-              return DishCard(
-                name: dish.name,
-                description: dish.description,
-                priceMinor: dish.priceMinor,
-                currency: dish.currency,
-                imageUrl: dish.imageUrl,
-                available: dish.available,
-                orderCount: dish.orderCount,
-                restaurantName: dish.restaurantName,
-                quantity: line?.quantity ?? 0,
-                onAdd: () => addItemToCart(context, ref, dish.asMenuItem()),
-                onIncrement: () => ref
-                    .read(cartProvider.notifier)
-                    .setQuantity(dish.id, (line?.quantity ?? 0) + 1),
-                onDecrement: () => ref
-                    .read(cartProvider.notifier)
-                    .setQuantity(dish.id, (line?.quantity ?? 1) - 1),
-              );
-            },
-          ),
       ],
+    );
+  }
+}
+
+class _OfferMiniCard extends StatelessWidget {
+  const _OfferMiniCard({required this.offer, required this.onTap});
+
+  final Offer offer;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: EdgeInsets.zero,
+      clip: true,
+      width: 260,
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppImage(
+            url: offer.imageUrl,
+            height: 96,
+            fallbackIcon: Icons.local_offer_outlined,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if ((offer.badge ?? '').isNotEmpty)
+                  Pill(
+                    label: offer.badge!,
+                    color: AppColors.forestDeep,
+                    background: AppColors.lime,
+                    dense: true,
+                  ),
+                const SizedBox(height: 6),
+                Text(offer.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(offer.ctaLabel.isEmpty ? 'View offer' : offer.ctaLabel,
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.forest)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

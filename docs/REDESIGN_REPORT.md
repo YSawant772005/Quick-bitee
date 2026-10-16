@@ -97,7 +97,9 @@ No existing field, route or contract was changed; only additions:
 - `AppImage` gives a branded, non-broken fallback for missing/slow images — no
   placeholder boxes or broken URLs.
 - Order-history and tracking images come from product data, not guesses.
-- Only real data is shown: no invented ratings, delivery ETAs, offers or fees.
+- Only real data is shown: no invented ratings, review counts or reviews. (Later
+  update added real *seeded* ETAs/addresses/opening hours and clearly-labelled
+  **demo** offers — see §10.)
 
 ## 8. Verification performed
 
@@ -119,12 +121,16 @@ Two widget tests were updated for legitimate copy changes: the wordmark
    (`TERMINAL_STATUSES = {PAYMENT_FAILED, FAILED, DRIVER_ASSIGNED}`). The UI shows
    "Out for delivery" as the final happy-path stage rather than a fake "Delivered".
    Add a `DELIVERED` transition if a true delivery step is required.
-2. **Backend tests unexecuted** — run `pytest` once Docker (PostgreSQL + RabbitMQ)
-   is up; the new catalog/admin tests are included.
+2. ~~**Backend tests unexecuted**~~ — **Resolved (see §10):** `pytest` now runs
+   against live PostgreSQL + RabbitMQ and passes (70 tests, incl. catalog/admin
+   and the new `test_restaurant_details.py`).
 3. **Reference image** `docs/reference.png` could not be read by this model (no image
    input); the written spec was followed. A human should diff the result against it.
-4. **Restaurant model is minimal** — only id/name/description/cuisine/image/available;
-   no rating/ETA/offers, so none are displayed.
+4. ~~**Restaurant model is minimal** — only id/name/description/cuisine/image/available;
+   no rating/ETA/offers, so none are displayed.~~ **Superseded — see §10.** The model
+   now carries address/opening-hours/ETA, restaurant detail pages + per-restaurant
+   menu filters/sorts, a homepage promo carousel, an offers page, and honest
+   rating handling (ratings shown only when real; none are fabricated).
 5. **Payments are simulated** — no method selection or real fees; checkout shows the
    item total and states the server confirms the final amount.
 6. **API title** remains "QuickBite API" (FastAPI docs); only user-facing UI is
@@ -132,3 +138,109 @@ Two widget tests were updated for legitimate copy changes: the wordmark
 7. **Stale-doc note** — `docs/ui-interaction-inventory.md` predates the refresh;
    a header note explains the changed copy/line numbers and the two new screens.
 8. **No new dependencies**; charts are hand-rolled `CustomPainter` widgets.
+
+## 10. Update — restaurant details, offers & carousel
+
+Date: 2026-10-16 · Additive follow-up to the refresh. Adds a full restaurant
+**detail page** for every restaurant, per-restaurant **menu filtering/sorting**,
+a homepage **promo carousel**, an **offers** page, and rating/category/ETA
+surfacing — all backward-compatible with the existing Flutter client contracts.
+
+**New user-facing features**
+- **Restaurant detail page** — reachable for every restaurant: hero image, name,
+  cuisine, description, rating (only when real), ETA, address, opening hours,
+  dish count, an offers card, add-to-cart, and a clear route back to listings.
+- **Per-restaurant menu filters** — food type (All/Veg/Non-veg), category, name
+  search and price sort, all combinable, with a Reset action and a helpful
+  no-match state. (Menus are small — ≤ ~294 dishes — so filtering runs
+  client-side; the same params are sent to the API for parity.)
+- **Homepage promo carousel** — food photography, QuickBitee branding, CTAs,
+  prev/next + indicators, and a pause control. Auto-advance is on by default but
+  disabled in widget tests; carousel slides deep-link to a restaurant/category/
+  offer.
+- **Offers page** (`/offers`) — genuine offers only; where none are configured,
+  clearly-labelled **demo** offers are shown in development with a disclosure
+  that no discount is applied at checkout.
+
+**Honesty**
+- **No fabricated ratings or reviews.** No rating/review data exists, so
+  `rating`/`review_count` stay `NULL` and the UI omits them; "Top rated" surfaces
+  only real ratings, and "popular" uses real order counts.
+
+**Backend (additive)**
+- `models/catalog.py`: restaurant `address`/`opening_hours`/`eta_minutes_*`; the
+  migration backfills existing rows with safe demo values.
+- `schemas/catalog.py`: `CategoryTagOut`, extended `RestaurantOut`/`MenuItemOut`/
+  `DishOut`, plus `PromoBannerOut`/`OfferOut`/`PromotionsOut`.
+- `api/v1/restaurants.py`: enrichment + filter/sort helpers across
+  `/restaurants`, `/restaurants/{id}`, `/restaurants/{id}/menu`, `/dishes`.
+- `app/promotions.py` + `api/v1/promotions.py`: `GET /promotions` (banners +
+  demo offers, gated by `settings.demo_promotions_enabled`).
+- `app/catalog/ids.py`: shared stable-id helper used by seeds.
+
+**Verification**
+| Check | Result |
+|---|---|
+| `flutter analyze` | 0 errors (2 pre-existing `dart:html` infos) |
+| `flutter test` | 28 pass (23 previous + 5 new restaurant-detail tests) |
+| Backend `pytest` | 70 passed (incl. `test_restaurant_details.py`) |
+| `docker compose build api web` + `up -d` | live stack verified |
+
+**Limitations / mobile parity**
+- Ratings/reviews remain absent from the data model (no seeding of fake content);
+  add real review data before enabling rating filters/sorts meaningfully.
+- Offers are demo-only until a real promotions source exists.
+- The Flutter **mobile** app shares this codebase; the new models/API client are
+  already used by web — mobile needs the same widget wiring to expose the detail
+  page, filters, carousel and offers (contracts are already compatible).
+
+## 11. Update — pagination & infinite scroll
+
+Date: 2026-10-16 · Additive follow-up. Every catalogue listing now supports two
+user-controlled ways to reveal more results, chosen with a single visible
+toggle and remembered for the rest of the session.
+
+**New user-facing features**
+- **Pagination / Infinite-scroll toggle** — shown on the home page, Explore and
+  each restaurant menu. The choice is session-wide (a Riverpod provider), so it
+  stays consistent as the user navigates between screens.
+- **Pagination mode** — Previous / Next, numbered page buttons with an ellipsis
+  window for long ranges, and a "Showing X–Y of N · Page i of n" summary; page
+  changes scroll the list back to the top.
+- **Infinite mode** — the next page loads automatically as the footer nears the
+  viewport bottom, with a spinner while it is in flight and a real "Load more"
+  fallback button; short pages auto-fill until the footer is off screen.
+- **Graceful states everywhere** — loading skeletons, empty, first-load error
+  (with retry), load-more error (with retry), and an end-of-list marker. Rows are
+  de-duplicated by id, so no repeats and no duplicate requests.
+- Filters (search, veg/non-veg, category), price sort, offers and the cart are
+  preserved across mode switches and page loads.
+
+**Implementation**
+- `frontend/lib/shared/paged_list.dart` — `BrowseMode` + `browseModeProvider`,
+  `PagedListController<T>` (backend `updateFetch` **or** client-side
+  `setLocalItems`), `BrowseModeToggle`, `PaginationControls`, `InfiniteScrollFooter`,
+  `PagedResultsFooter`, and `scheduleNearBottomLoad` for section-scoped scroll.
+- **Explore → Dishes uses backend pagination** (the live dish catalogue is
+  **27,446** rows). Bounded lists — Explore → Restaurants (**135**),
+  restaurant menus (≤ a few hundred), and the home sections — are fetched once
+  and sliced client-side; switching any of them to server paging later is a
+  one-line change with no UI impact.
+- No backend changes were required: `/dishes`, `/restaurants` and
+  `/restaurants/{id}/menu` already accept `page` / `page_size` / filters / sort.
+
+**Verification**
+| Check | Result |
+|---|---|
+| `flutter analyze` | 0 errors (2 pre-existing `dart:html` infos) |
+| `flutter test` | 48 pass (28 previous + 16 paged-list + 4 screen tests) |
+| `flutter build web` | Built `build/web` |
+| Live API | `/dishes?page=1\|2&page_size=5` → distinct pages of 27,446 rows |
+| `docker compose build web` + `up -d web` | deployed bundle contains the new UI strings |
+
+**Limitations / mobile parity**
+- The bounded lists are still fetched in full before client-side slicing; only the
+  dish catalogue uses true server-side pagination. The shared controller can be
+  pointed at `updateFetch` later without touching the screens.
+- The Flutter **mobile** app shares this codebase; it needs the same widget
+  wiring (the provider and controllers are already platform-agnostic).

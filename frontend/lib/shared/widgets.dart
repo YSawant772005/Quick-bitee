@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../core/config.dart';
@@ -650,4 +651,105 @@ void showAppSnack(BuildContext context, String message, {IconData icon = Icons.c
         action: action,
       ),
     );
+}
+
+/// A horizontally scrolling strip for filter chips, category tiles and offer
+/// rails.
+///
+/// Flutter only scrolls a horizontal list with a trackpad or a touch swipe by
+/// default: a plain mouse wheel emits a *vertical* delta, so on the web the row
+/// would not move and chips past the right edge were unreachable. This widget
+/// adds what a bare [SingleChildScrollView] lacks:
+///
+///  * a [Scrollbar] so the strip is visibly scrollable,
+///  * mouse-wheel support — the wheel delta is mapped onto the strip,
+///  * click-and-drag with a mouse, via an expanded [ScrollBehavior].
+///
+/// Only the strip scrolls horizontally; the surrounding page is untouched. At
+/// either end the wheel event is left alone so the page keeps scrolling.
+class HorizontalChipScroller extends StatefulWidget {
+  const HorizontalChipScroller({
+    super.key,
+    required this.child,
+    this.padding = EdgeInsets.zero,
+    this.semanticLabel,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final String? semanticLabel;
+
+  @override
+  State<HorizontalChipScroller> createState() =>
+      _HorizontalChipScrollerState();
+}
+
+class _HorizontalChipScrollerState extends State<HorizontalChipScroller> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_controller.hasClients) return;
+    final position = _controller.position;
+    // A genuine horizontal delta (trackpad swipe) wins; otherwise the vertical
+    // wheel is treated as horizontal movement over this strip.
+    final delta = event.scrollDelta.dx != 0
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    if (delta == 0) return;
+    final target = (position.pixels + delta)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    // At either end, leave the event for the page so it keeps scrolling.
+    if (target == position.pixels) return;
+    // Claim the signal so the page behind the strip does not scroll too.
+    GestureBinding.instance.pointerSignalResolver.register(event, (event) {
+      if (event is PointerScrollEvent && _controller.hasClients) {
+        final pos = _controller.position;
+        _controller.jumpTo((pos.pixels + delta)
+            .clamp(pos.minScrollExtent, pos.maxScrollExtent));
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget child = ScrollConfiguration(
+      behavior: const _HorizontalDragBehavior(),
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        padding: widget.padding,
+        child: widget.child,
+      ),
+    );
+    child = Scrollbar(controller: _controller, child: child);
+    child = Listener(onPointerSignal: _onPointerSignal, child: child);
+    if (widget.semanticLabel != null) {
+      child = Semantics(
+        container: true,
+        label: widget.semanticLabel,
+        child: child,
+      );
+    }
+    return child;
+  }
+}
+
+/// Lets a mouse drag a horizontal strip (touch/stylus/trackpad keep working).
+class _HorizontalDragBehavior extends MaterialScrollBehavior {
+  const _HorizontalDragBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.invertedStylus,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+      };
 }
