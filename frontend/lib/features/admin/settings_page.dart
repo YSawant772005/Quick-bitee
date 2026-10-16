@@ -99,22 +99,15 @@ class _Body extends StatelessWidget {
               for (final entry in _orderTransitions.entries)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
+                  child: Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       AdminStatusBadge(status: entry.key, dense: true),
-                      const SizedBox(width: AppSpacing.sm),
                       const Icon(Icons.arrow_forward_rounded, size: 15, color: AdminColors.inkMuted),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Wrap(
-                          spacing: AppSpacing.xs,
-                          runSpacing: AppSpacing.xs,
-                          children: [
-                            for (final target in entry.value)
-                              AdminStatusBadge(status: target, dense: true),
-                          ],
-                        ),
-                      ),
+                      for (final target in entry.value)
+                        AdminStatusBadge(status: target, dense: true),
                     ],
                   ),
                 ),
@@ -193,12 +186,15 @@ class _Body extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(label, style: AdminType.bodySoft)),
+          Expanded(flex: 3, child: Text(label, style: AdminType.bodySoft)),
           const SizedBox(width: AppSpacing.md),
-          Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: color),
+          Expanded(
+            flex: 2,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: color),
+            ),
           ),
         ],
       ),

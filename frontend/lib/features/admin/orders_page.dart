@@ -142,7 +142,14 @@ class _CountTile extends StatelessWidget {
             decoration: BoxDecoration(color: effective, shape: BoxShape.circle),
           ),
           const SizedBox(width: 7),
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: muted ? AdminColors.inkMuted : AdminColors.inkSoft)),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: muted ? AdminColors.inkMuted : AdminColors.inkSoft),
+            ),
+          ),
           const SizedBox(width: 8),
           Text('$value', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: effective)),
         ],

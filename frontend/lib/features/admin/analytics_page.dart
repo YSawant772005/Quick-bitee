@@ -50,6 +50,7 @@ class _Body extends StatelessWidget {
       children: [
         AdminGrid(
           minItemWidth: 210,
+          minColumns: 2,
           children: [
             MetricCard(label: 'Orders', value: a.totalOrders.toString(), caption: 'all statuses in period'),
             MetricCard(

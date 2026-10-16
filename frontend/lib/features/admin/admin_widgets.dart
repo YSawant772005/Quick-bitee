@@ -81,14 +81,18 @@ class AdminStatusBadge extends StatelessWidget {
         children: [
           Icon(statusIcon(status), size: dense ? 12 : 13, color: color),
           const SizedBox(width: 4),
-          Text(
-            adminStatusLabel(status),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: dense ? 11 : 12,
-              fontWeight: FontWeight.w700,
-              color: color,
+          // Flexible so a long status can ellipsize inside a narrow table cell
+          // or stacked card instead of overflowing its row.
+          Flexible(
+            child: Text(
+              adminStatusLabel(status),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: dense ? 11 : 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -303,27 +307,58 @@ class AdminSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: AdminType.sectionTitle),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(subtitle!, style: AdminType.caption),
-                    ],
-                  ],
-                ),
-              ),
-              if (trailing != null) trailing!,
-            ],
-          ),
+          _header(),
           const SizedBox(height: AppSpacing.lg),
           child,
         ],
       ),
+    );
+  }
+
+  /// Responsive section header.
+  ///
+  /// On wide cards the title sits on the left and the trailing control (a
+  /// granularity switch, filter, or legend) is pushed to the right. On narrow
+  /// cards the two would fight for the same line, so the trailing control is
+  /// stacked under the title and — worst case — scrolls sideways instead of
+  /// overflowing.
+  Widget _header() {
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: AdminType.sectionTitle),
+        if (subtitle != null) ...[
+          const SizedBox(height: 2),
+          Text(subtitle!, style: AdminType.caption),
+        ],
+      ],
+    );
+    if (trailing == null) return titleBlock;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 520) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleBlock,
+              const SizedBox(height: AppSpacing.md),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: trailing,
+              ),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: titleBlock),
+            const SizedBox(width: AppSpacing.md),
+            trailing!,
+          ],
+        );
+      },
     );
   }
 }
@@ -372,13 +407,17 @@ class DeltaBadge extends StatelessWidget {
         children: [
           Icon(icon, size: dense ? 12 : 13, color: color),
           const SizedBox(width: 3),
-          Text(
-            '${pct > 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontSize: dense ? 11 : 11.5,
-              fontWeight: FontWeight.w800,
-              color: color,
-              letterSpacing: 0.1,
+          Flexible(
+            child: Text(
+              '${pct > 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: dense ? 11 : 11.5,
+                fontWeight: FontWeight.w800,
+                color: color,
+                letterSpacing: 0.1,
+              ),
             ),
           ),
         ],
@@ -452,12 +491,20 @@ class AdminGrid extends StatelessWidget {
     this.minItemWidth = 240,
     this.spacing = AppSpacing.md,
     this.runSpacing = AppSpacing.md,
+    this.minColumns = 1,
   });
 
   final List<Widget> children;
   final double minItemWidth;
   final double spacing;
   final double runSpacing;
+
+  /// Floor on the number of columns, regardless of [minItemWidth].
+  ///
+  /// KPI grids set this to 2 so phones always get the compact two-up layout
+  /// even though the tiles' natural width would otherwise collapse them to a
+  /// single full-width column.
+  final int minColumns;
 
   @override
   Widget build(BuildContext context) {
@@ -466,6 +513,7 @@ class AdminGrid extends StatelessWidget {
         final available = constraints.maxWidth;
         var columns = ((available + spacing) / (minItemWidth + spacing)).floor();
         if (columns < 1) columns = 1;
+        if (columns < minColumns) columns = minColumns;
         if (columns > children.length && children.isNotEmpty) columns = children.length;
         final itemWidth = (available - spacing * (columns - 1)) / columns;
         return Wrap(
@@ -803,8 +851,8 @@ class PaginationBar extends StatelessWidget {
                 ),
             ],
           ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             IconButton(
               tooltip: 'First page',
@@ -1056,7 +1104,7 @@ class AdminLoading extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Text(label, style: AdminType.caption),
+              Expanded(child: Text(label, style: AdminType.caption)),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),

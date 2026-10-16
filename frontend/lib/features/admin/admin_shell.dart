@@ -83,7 +83,10 @@ class AdminShell extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _AdminHeader(title: adminTitleFor(location), location: location, showMenuButton: false),
+                  SafeArea(
+                    bottom: false,
+                    child: _AdminHeader(title: adminTitleFor(location), location: location, showMenuButton: false),
+                  ),
                   Expanded(child: child),
                 ],
               ),
@@ -103,7 +106,10 @@ class AdminShell extends ConsumerWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _AdminHeader(title: adminTitleFor(location), location: location, showMenuButton: true),
+          SafeArea(
+            bottom: false,
+            child: _AdminHeader(title: adminTitleFor(location), location: location, showMenuButton: true),
+          ),
           Expanded(child: child),
         ],
       ),
@@ -435,7 +441,13 @@ class _AdminHeader extends ConsumerWidget {
           ),
           if (showRange && narrow) ...[
             const SizedBox(height: 10),
-            const DateRangeControl(compact: true),
+            // The compact period switcher (a segmented control) cannot shrink
+            // its own segments; let it scroll sideways so it stays reachable on
+            // the narrowest phones instead of clipping.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: const DateRangeControl(compact: true),
+            ),
           ],
           const SizedBox(height: 8),
           const Divider(height: 1, thickness: 1, color: AdminColors.line),
@@ -460,7 +472,12 @@ class _AdminHeader extends ConsumerWidget {
             children: [
               Text('Reporting period', style: AdminType.sectionTitle),
               const SizedBox(height: AppSpacing.md),
-              const DateRangeControl(),
+              // Scrollable so the segmented control stays usable even on a
+              // narrow phone inside the sheet.
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: const DateRangeControl(),
+              ),
               const SizedBox(height: AppSpacing.lg),
               SizedBox(
                 width: double.infinity,

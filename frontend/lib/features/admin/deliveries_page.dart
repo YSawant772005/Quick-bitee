@@ -77,7 +77,6 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
           AdminSection(
             title: 'Active assignments',
             padding: EdgeInsets.zero,
-            trailing: const SizedBox.shrink(),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
               child: Column(

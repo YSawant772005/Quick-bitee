@@ -95,7 +95,6 @@ class _OrdersTableState extends ConsumerState<OrdersTable> {
       title: widget.title,
       subtitle: widget.subtitle,
       padding: EdgeInsets.zero,
-      trailing: const SizedBox.shrink(),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
         child: Column(

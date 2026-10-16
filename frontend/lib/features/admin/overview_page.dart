@@ -85,6 +85,7 @@ class _SummaryBody extends ConsumerWidget {
         // --- KPIs -----------------------------------------------------------
         AdminGrid(
           minItemWidth: 236,
+          minColumns: 2,
           children: [
             MetricCard(
               label: 'Total orders',

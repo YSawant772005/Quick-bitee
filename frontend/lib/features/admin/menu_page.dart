@@ -70,7 +70,6 @@ class _AdminMenuPageState extends ConsumerState<AdminMenuPage> {
         title: 'Dishes',
         subtitle: 'Includes dishes currently hidden from customers',
         padding: EdgeInsets.zero,
-        trailing: const SizedBox.shrink(),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
           child: Column(
@@ -233,12 +232,16 @@ class _AdminMenuPageState extends ConsumerState<AdminMenuPage> {
               cell: (context, row) => Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    row.available ? 'Available' : 'Unavailable',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: row.available ? AppColors.success : AdminColors.inkMuted,
+                  Flexible(
+                    child: Text(
+                      row.available ? 'Available' : 'Unavailable',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: row.available ? AppColors.success : AdminColors.inkMuted,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),

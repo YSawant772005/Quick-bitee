@@ -55,7 +55,6 @@ class _AdminCustomersPageState extends ConsumerState<AdminCustomersPage> {
         title: 'Accounts',
         subtitle: 'Customer role only · administrators are not listed',
         padding: EdgeInsets.zero,
-        trailing: const SizedBox.shrink(),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
           child: Column(

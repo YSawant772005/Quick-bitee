@@ -58,7 +58,6 @@ class _AdminRestaurantsPageState extends ConsumerState<AdminRestaurantsPage> {
         title: 'All restaurants',
         subtitle: 'Includes venues currently closed to customers',
         padding: EdgeInsets.zero,
-        trailing: const SizedBox.shrink(),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
           child: Column(
@@ -187,12 +186,16 @@ class _AdminRestaurantsPageState extends ConsumerState<AdminRestaurantsPage> {
               cell: (context, row) => Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    row.available ? 'Open' : 'Closed',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: row.available ? AppColors.success : AdminColors.inkMuted,
+                  Flexible(
+                    child: Text(
+                      row.available ? 'Open' : 'Closed',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: row.available ? AppColors.success : AdminColors.inkMuted,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
