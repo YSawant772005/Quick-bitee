@@ -612,6 +612,9 @@ The previous documentation recorded an example order reaching `DRIVER_ASSIGNED`.
 
 ## Project Status
 
+Android App Video
+https://drive.google.com/drive/folders/1LDDqweZnOdmsTiLZMxx5uisErxPAPC5V
+
 QuickBite brings together a Flutter client, a FastAPI backend, PostgreSQL persistence, and RabbitMQ-driven asynchronous processing. It includes reliability mechanisms such as idempotent checkout, a transactional outbox, durable retries, and failure injection, alongside customer features and a responsive admin interface.
 
 For the latest verified implementation details, test results, screenshots, and known limitations, consult `PROJECT_STATUS.md` and the actual results of the current build and test commands.
